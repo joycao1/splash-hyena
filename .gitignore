@@ -1,0 +1,41 @@
+# --- build & binaries ---
+*.o
+*.a
+*.so
+*/bin/
+*/build/
+bkc_filter/test_zstd
+
+# --- logs/cache ---
+logs/
+*.log
+*.out
+*.err
+__pycache__/
+*.pyc
+
+# --- LARGE bio/data/artifacts ---
+tdata/
+bkcdump/
+bkctxt/
+*.sra
+*.fastq*
+*.fq*
+*.bam
+*.sam
+*.cram
+*.h5
+*.npz
+*.pt
+*.ckpt
+
+# --- heavy vendor/tests/media ---
+bkc_filter/libs/
+bkc_filter/*/test/
+*.tar.gz
+*.zip
+*.pdf
+*.jpg
+
+# --- known big text dumps in this repo ---
+bkc_filter/ERR*.txt
