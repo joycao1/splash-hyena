@@ -18,23 +18,23 @@ This repository contains a **high-performance pipeline** for processing **large 
 ### 1. Chunk FASTQ Files
 ```bash
 sbatch chunk_fastqs.sbatch /path/to/fastqs
-### 2. Prepare Pair and Sample Lists
+
+2. Prepare Pair and Sample Lists
+
 Ensure pairs.txt or pairs_tabula.txt and samples.txt are correctly generated using sed and sort.
 
-### 3. Run Filtering and Dump
-```bash
-Copy code
+3. Run Filtering and Dump
 THREADS=32 EXEC_FILTER=./bin/bkc_filter EXEC_DUMP=./bin/bkc_dump ./submit_chunks.sh pairs.txt
-### 4. Aggregate to FASTA
-```bash
-Copy code
+
+4. Aggregate to FASTA
 NL=$(wc -l < samples.txt)
 sbatch --array=1-$NL carrots_ultra.sbatch
-### 5. Count Carrots
-```bash
-Copy code
+
+5. Count Carrots
 sbatch out/count_carrots.sbatch out/fasta carrot_counts
-### Notes
+
+Notes
+
 Partition: Jobs use the horence partition by default.
 
 Modules: Ensure required modules (e.g., python, gcc, samtools) are loaded on Sherlock.
@@ -42,4 +42,3 @@ Modules: Ensure required modules (e.g., python, gcc, samtools) are loaded on She
 Performance: Increase --cpus-per-task and memory in .sbatch files for very large datasets.
 
 Storage: Outputs are written under out/ (e.g., out/fasta, out/fasta_tabula, carrot_counts_*).
-
