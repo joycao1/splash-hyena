@@ -1,0 +1,1 @@
+input/ERR13720418_1.fastq,input/ERR13720418_2.fastq

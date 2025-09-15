@@ -1,0 +1,31 @@
+{
+    "configurations": [
+      {
+        "name": "Mac",
+        "includePath": [
+          "${workspaceFolder}/**",
+          "${workspaceFolder}/libs/refresh",
+          "/opt/homebrew/include",
+          "/opt/homebrew/include/**",
+          "${workspaceFolder}/libs/refresh/parallel_queues/lib",
+          "${workspaceFolder}/libs/zstd/lib",
+          "${workspaceFolder}/libs/refresh/include"
+        ],
+        "browse": {
+          "path": [
+            "/opt/homebrew/include",
+        "${workspaceFolder}"
+        ],
+          "limitSymbolsToIncludedHeaders": true
+      },
+        "defines": [],
+        "macFrameworkPath": [],
+        "compilerPath": "/usr/bin/clang++",
+        "cStandard": "c17",
+        "cppStandard": "c++20",
+        "intelliSenseMode": "macos-clang-arm64"
+      }
+    ],
+    "version": 4
+  }
+  

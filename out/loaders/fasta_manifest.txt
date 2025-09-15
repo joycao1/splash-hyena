@@ -1,0 +1,7 @@
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720414.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720415.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720416.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720417.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720418.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720419.fasta
+/scratch/groups/horence/joycao/preprocessing/out/fasta2/carrots_ERR13720420.fasta

@@ -1,0 +1,1 @@
+input/test1/R1.part_00.fastq,input/test1/R2.part_00.fastq

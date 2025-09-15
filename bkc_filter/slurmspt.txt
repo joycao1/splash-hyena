@@ -1,0 +1,69 @@
+#!/bin/bash
+#SBATCH --job-name=batch_for_filter_test
+#SBATCH --partition=horence
+#SBATCH --cpus-per-task=128
+#SBATCH --mem=256G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x-%j.out
+#SBATCH --error=logs/%x-%j.err
+
+set -euo pipefail
+
+# --- Modules (tolerant if GNU parallel isn't a module here) ---
+if ! command -v parallel >/dev/null 2>&1; then
+  module load gnu_parallel || module load parallel || true
+fi
+module load python || true
+ml gcc/14.2.0 || true
+
+# --- Paths (assumes you're submitting from the dir with these files) ---
+SUBMIT_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
+BIN="$SUBMIT_DIR/bin/bkc_filter"
+DICT="$SUBMIT_DIR/8mer_list_for_single_cell_testing.txt"
+MANIFEST="$SUBMIT_DIR/fltest.txt"   # CSV: R1,R2 per line (no sample_id column)
+OUT_DIR="$SUBMIT_DIR/bkctest"
+LOG_DIR="$SUBMIT_DIR/logs"
+mkdir -p "$OUT_DIR" "$LOG_DIR"
+
+# --- Sanity checks ---
+[[ -x "$BIN" ]] || { echo "ERROR: $BIN not found or not executable"; exit 1; }
+[[ -s "$DICT" ]] || { echo "ERROR: $DICT missing/empty"; exit 1; }
+[[ -s "$MANIFEST" ]] || { echo "ERROR: $MANIFEST missing/empty"; exit 1; }
+
+# --- Chunk manifest (evenly) ---
+LINES=$(grep -c . "$MANIFEST" || echo 0)
+CHUNKS=$(( LINES < 4 ? LINES : 4 ))
+(( CHUNKS >= 1 )) || CHUNKS=1
+split -n l/$CHUNKS -d "$MANIFEST" chunk_
+
+# --- Concurrency (start conservative; raise after checking MaxRSS) ---
+PAR=$(( SLURM_CPUS_PER_TASK / 4 ))
+(( PAR >= 1 )) || PAR=1
+
+# --- Wrapper script to avoid nested-quote issues in GNU parallel ---
+WRAP="$SUBMIT_DIR/run_one_chunk.sh"
+cat > "$WRAP" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+f="$1"; BIN="$2"; DICT="$3"; OUT="$4"
+if [ ! -s "$f" ]; then echo "skip $f (empty)"; exit 0; fi
+/usr/bin/time -v "$BIN" --mode pair \
+  --input_name "$f" \
+  -d "$DICT" \
+  --cbc_len 16 --umi_len 12 --leader_len 8 --follower_len 31 --gap_len 0 \
+  --verbose 2 \
+  --n_threads "$SLURM_CPUS_PER_TASK" \
+  --output_name "$OUT/$(basename "$f").bkc"
+EOF
+chmod +x "$WRAP"
+
+# --- Run chunks in parallel if possible; otherwise serially ---
+if command -v parallel >/dev/null 2>&1; then
+  parallel -j "$PAR" "$WRAP" {} "$BIN" "$DICT" "$OUT_DIR" ::: chunk_*
+else
+  echo "GNU parallel not found; running serially" >&2
+  for f in chunk_*; do "$WRAP" "$f" "$BIN" "$DICT" "$OUT_DIR"; done
+fi
+
+echo "Done. Outputs in $OUT_DIR"
+

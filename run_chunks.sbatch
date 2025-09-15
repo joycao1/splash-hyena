@@ -13,7 +13,7 @@ set -euo pipefail
 
 # --------- Config ----------
 ANCHORS="${ANCHORS:-8mer_list_for_single_cell_testing.txt}"
-PAIRS_ALL="${PAIRS_ALL:-pairs.txt}"
+PAIRS_ALL="${PAIRS_ALL:-pairs_tabula.txt}"
 
 # Let caller override thread count; default to the Slurm allocation
 THREADS="${THREADS:-${SLURM_CPUS_PER_TASK}}"
@@ -24,7 +24,7 @@ EXEC_DUMP="${EXEC_DUMP:-}"
 
 if [[ -z "${EXEC_FILTER}" ]]; then
   if   [[ -x ./commands/bkc_filter ]]; then EXEC_FILTER=./commands/bkc_filter
-  elif [[ -x ./bkc_filter/bin/bkc_filter      ]]; then EXEC_FILTER=./bin/bkc_filter
+  elif [[ -x ./bkc_filter/bin/bkc_filter ]]; then EXEC_FILTER=./bkc_filter/bin/bkc_filter
   elif command -v bkc_filter >/dev/null 2>&1; then EXEC_FILTER=$(command -v bkc_filter)
   else echo "ERROR: bkc_filter not found (try setting EXEC_FILTER=...)"; exit 1
   fi
@@ -32,12 +32,14 @@ fi
 
 if [[ -z "${EXEC_DUMP}" ]]; then
   if   [[ -x ./commands/bkc_dump ]]; then EXEC_DUMP=./commands/bkc_dump
-  elif [[ -x ./bkc_filter/bin/bkc_dump      ]]; then EXEC_DUMP=./bin/bkc_dump
+  elif [[ -x ./bkc_filter/bin/bkc_dump      ]]; then EXEC_DUMP=./bkc_filter/bin/bkc_dump
   elif command -v bkc_dump >/dev/null 2>&1; then EXEC_DUMP=$(command -v bkc_dump)
   else echo "ERROR: bkc_dump not found (try setting EXEC_DUMP=...)"; exit 1
   fi
 fi
 
+# Per-task mini list file
+TMP_LIST="$(mktemp -p "${SLURM_TMPDIR:-/tmp}" pairs.XXXX.txt)"
 # --------- Env / modules ----------
 [[ -f /etc/profile.d/modules.sh ]] && source /etc/profile.d/modules.sh
 module load python
@@ -48,7 +50,7 @@ unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU
 SRUN_MEM_OPT="--mem=0"
 
 # --------- Prep ----------
-mkdir -p logs bkcdump bkctxt "${SLURM_TMPDIR:-/tmp}"
+mkdir -p logs tabuladump tabulatxt "${SLURM_TMPDIR:-/tmp}"
 
 [[ -s "$ANCHORS"   ]] || { echo "ERROR: anchor list not found/empty: $ANCHORS"; exit 1; }
 [[ -s "$PAIRS_ALL" ]] || { echo "ERROR: pairs list not found/empty: $PAIRS_ALL"; exit 1; }
@@ -66,8 +68,8 @@ BASEFILE=${BASEFILE%.fastq.gz}; BASEFILE=${BASEFILE%.fq.gz}; BASEFILE=${BASEFILE
 SAMPLE=$(basename "$(dirname "$R1")")
 OUTBASE="${SAMPLE}_${BASEFILE}"
 
-OUT_BKC="bkcdump/${OUTBASE}.bkc"
-OUT_TXT="bkctxt/${OUTBASE}.txt"
+OUT_BKC="newdump/${OUTBASE}.bkc"
+OUT_TXT="newtxt/${OUTBASE}.txt"
 
 # Skip if done
 if [[ -s "$OUT_BKC" && -s "$OUT_TXT" ]]; then

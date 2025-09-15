@@ -16,10 +16,17 @@ __pycache__/
 
 # --- LARGE bio/data/artifacts ---
 tdata/
-bkcdump/
 bkctxt/
+bkcdump/
+tbdump/
+tbtxt/
+tabuladump/
+tabulatxt/
+newdump/
+newtxt/
 *.sra
 *.fastq*
+*.fasta
 *.fq*
 *.bam
 *.sam
@@ -28,7 +35,7 @@ bkctxt/
 *.npz
 *.pt
 *.ckpt
-
+*.bkc
 # --- heavy vendor/tests/media ---
 bkc_filter/libs/
 bkc_filter/*/test/

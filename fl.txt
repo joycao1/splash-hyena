@@ -1,0 +1,1 @@
+chunks/ERR13720415/R1.part_00.fastq,chunks/ERR13720415/R2.part_00.fastq

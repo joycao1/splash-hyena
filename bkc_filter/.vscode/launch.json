@@ -1,0 +1,123 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "(lldb) Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "enter program name, for example ${workspaceFolder}/a.out",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "lldb"
+    },
+
+    {
+      "name": "Run BKC Filter",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/bkc_filter",
+      "args": [
+        "--mode", "pair",
+        "--input_name", "fl.txt",
+        "--cbc_len", "16",
+        "--umi_len", "12",
+        "--output_name", "ERR13720418_pair.bkc"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": true,
+      "MIMode": "lldb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+
+    {
+      "name": "Debug bkc_filter (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/bkc_filter",
+      "args": [
+        "--mode", "pair",
+        "--input_name", "fl.txt",
+        "-d", "8mer_list_for_single_cell_testing.txt",
+        "--cbc_len", "16",
+        "--umi_len", "12",
+        "--leader_len", "8",
+        "--follower_len", "31",
+        "--gap_len", "0",
+        "--verbose", "2",
+        "--output_name", "ERR13720418_pair.bkc"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false,
+      "preLaunchTask": "make debug"
+    },
+
+    {
+      "name": "Run bkc_filter",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/bkc_filter",
+      "args": [
+        "--mode", "pair",
+        "--input_name", "fl.txt",
+        "-d", "all_8mers.txt",
+        "--cbc_len", "16",
+        "--umi_len", "12",
+        "--leader_len", "8",
+        "--follower_len", "30",
+        "--verbose", "2",
+        "--output_name", "ERR13720418_pair.bkc"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "preLaunchTask": "make and make clean"
+    },
+
+    {
+      "name": "Run bkc_dump",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/bkc_dump",
+      "args": [
+        "--input_name", "ERR13720418_pair.bkc",
+        "--output_name", "ERR13720418_pair.txt"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "preLaunchTask": "make"  // Or whatever task builds bkc_dump, if needed
+    },
+    
+    {
+      "name": "Debug bkc (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/bkc",
+      "args": [
+        "--mode", "pair",
+        "--input_name", "fl.txt",
+        "--cbc_len", "16",
+        "--umi_len", "12",
+        "--leader_len", "8",
+        "--follower_len", "30",
+        "--verbose", "2",
+        "-d", "all_8mers.txt",
+        "--output_name", "ERR13720418_pair.bkc"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false,
+      "preLaunchTask": "make debug"
+    }
+
+    
+  ]
+}

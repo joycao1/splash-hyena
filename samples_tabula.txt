@@ -1,0 +1,4 @@
+TSP14_LymphNode_NA_10X_1_1_5Prime_S3_L001
+TSP14_LymphNode_NA_10X_1_1_5Prime_S3_L002
+TSP14_LymphNode_NA_10X_1_1_5Prime_S3_L003
+TSP14_LymphNode_NA_10X_1_1_5Prime_S3_L004

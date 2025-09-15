@@ -1,0 +1,234 @@
+#!/bin/bash
+#SBATCH --job-name=bkc_pair_chunked
+#SBATCH --partition=horence
+#SBATCH --cpus-per-task=128
+#SBATCH --mem=512G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x-%j.out
+#SBATCH --error=logs/%x-%j.err
+
+set -euo pipefail
+
+# ========== TUNABLES ==========
+TARGET_CHUNKS=32          # how many mini-chunks to make from a single R1/R2 pair
+PAR_DEFAULT_DIV=8         # parallel workers = CPUs / this divisor (start conservative)
+VERBOSE_LEVEL=1           # bkc_filter --verbose level (0/1/2)
+GROUP_BY_COLS="anchor,target"  # aggregation keys for final TSV (default: sum by anchor,target)
+# ==============================
+
+# ---- Locate GNU parallel (module optional) ----
+if ! command -v parallel >/dev/null 2>&1; then
+  module load gnu_parallel || module load parallel || true
+fi
+module load python || true
+ml gcc/14.2.0 || true
+
+# ---- Paths ----
+SUBMIT_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
+BIN="$SUBMIT_DIR/bin/bkc_filter"
+DUMP_BIN="${SUBMIT_DIR}/bin/bkc_dump"           # adjust if your dump tool differs
+DICT_SRC="$SUBMIT_DIR/8mer_list_for_single_cell_testing.txt"
+MANIFEST_ORIG="$SUBMIT_DIR/fltest.txt"          # CSV: R1,R2 per line (no sample_id)
+OUT_DIR="$SUBMIT_DIR/bkctest"
+LOG_DIR="$SUBMIT_DIR/logs"
+CHUNK_LOG_DIR="$LOG_DIR/chunks-${SLURM_JOB_ID:-local}"
+SCRATCH_DIR="${LOCAL_SCRATCH:-/scratch}/bkcrun_${SLURM_JOB_ID:-local}"
+
+mkdir -p "$OUT_DIR" "$LOG_DIR" "$CHUNK_LOG_DIR" "$SCRATCH_DIR"
+
+# ---- Sanity checks ----
+[[ -x "$BIN" ]] || { echo "ERROR: $BIN not found or not executable"; exit 1; }
+[[ -s "$DICT_SRC" ]] || { echo "ERROR: $DICT_SRC missing/empty"; exit 1; }
+[[ -s "$MANIFEST_ORIG" ]] || { echo "ERROR: $MANIFEST_ORIG missing/empty"; exit 1; }
+
+echo "[$(date -Is)] Node: $(hostname)"
+echo "[$(date -Is)] CPUs: ${SLURM_CPUS_PER_TASK:-NA}  MEM: ${SLURM_MEM_PER_NODE:-NA}"
+echo "[$(date -Is)] Manifest: $MANIFEST_ORIG ($(wc -l < "$MANIFEST_ORIG") lines)"
+echo "[$(date -Is)] Scratch: $SCRATCH_DIR"
+echo "[$(date -Is)] Output:  $OUT_DIR"
+
+# ---- Python splitter (preserves pairing; gz/plain) ----
+SPLITTER="$SCRATCH_DIR/split_fastq_pairs.py"
+cat > "$SPLITTER" <<'PY'
+import sys, os, gzip, argparse
+def openg(p,mode): return gzip.open(p,mode) if p.endswith(".gz") else open(p,mode)
+ap=argparse.ArgumentParser()
+ap.add_argument("--r1",required=True); ap.add_argument("--r2",required=True)
+ap.add_argument("--outdir",required=True); ap.add_argument("--chunks",type=int,required=True)
+a=ap.parse_args()
+os.makedirs(a.outdir,exist_ok=True)
+def oname(base,i,gz):
+    root=base.replace(".fastq.gz","").replace(".fastq","")
+    return f"{os.path.join(a.outdir,os.path.basename(root))}.part_{i:02d}.fastq"+(".gz" if gz else "")
+gz1=a.r1.endswith(".gz"); gz2=a.r2.endswith(".gz")
+if gz1!=gz2: print("ERROR: R1/R2 compression mismatch",file=sys.stderr); sys.exit(2)
+outs1=[openg(oname(a.r1,i,gz1),"wt") for i in range(a.chunks)]
+outs2=[openg(oname(a.r2,i,gz2),"wt") for i in range(a.chunks)]
+def w(f,rec): f.write("".join(rec))
+reads=0
+with openg(a.r1,"rt") as f1, openg(a.r2,"rt") as f2:
+    while True:
+        r1=[f1.readline() for _ in range(4)]
+        if not r1[0]: break
+        r2=[f2.readline() for _ in range(4)]
+        if not r2[0]: break
+        idx=reads%a.chunks; w(outs1[idx],r1); w(outs2[idx],r2); reads+=1
+        if reads%1_000_000==0: print(f"[splitter] {reads:,} pairs",file=sys.stderr)
+for fh in outs1+outs2: fh.close()
+print(f"[splitter] done: {reads:,} pairs -> {a.chunks} chunks",file=sys.stderr)
+PY
+
+# ---- Stage dictionary to scratch ----
+cp -f "$DICT_SRC" "$SCRATCH_DIR/"
+DICT="$SCRATCH_DIR/$(basename "$DICT_SRC")"
+
+# ---- Build working manifest on scratch (may be split from single pair) ----
+WORK_MANIFEST="$SCRATCH_DIR/manifest.csv"; : > "$WORK_MANIFEST"
+LINES=$(grep -c . "$MANIFEST_ORIG" || echo 0)
+
+if (( LINES == 1 )); then
+  echo "[$(date -Is)] Single pair -> splitting into $TARGET_CHUNKS mini-chunks on scratch"
+  IFS=, read -r R1 R2 < "$MANIFEST_ORIG"
+  [[ -s "$R1" && -s "$R2" ]] || { echo "ERROR: FASTQ missing in manifest"; exit 1; }
+  cp -f "$R1" "$SCRATCH_DIR/$(basename "$R1")"
+  cp -f "$R2" "$SCRATCH_DIR/$(basename "$R2")"
+  R1S="$SCRATCH_DIR/$(basename "$R1")"; R2S="$SCRATCH_DIR/$(basename "$R2")"
+  python "$SPLITTER" --r1 "$R1S" --r2 "$R2S" --outdir "$SCRATCH_DIR/split" --chunks "$TARGET_CHUNKS" \
+    2>&1 | tee "$CHUNK_LOG_DIR/split.log"
+  for i in $(seq -f "%02g" 0 $((TARGET_CHUNKS-1))); do
+    if [[ "$R1S" == *.gz ]]; then
+      echo "$SCRATCH_DIR/split/$(basename "${R1S%.fastq.gz}").part_${i}.fastq.gz,$SCRATCH_DIR/split/$(basename "${R2S%.fastq.gz}").part_${i}.fastq.gz" >> "$WORK_MANIFEST"
+    else
+      echo "$SCRATCH_DIR/split/$(basename "${R1S%.fastq}").part_${i}.fastq,$SCRATCH_DIR/split/$(basename "${R2S%.fastq}").part_${i}.fastq" >> "$WORK_MANIFEST"
+    fi
+  done
+else
+  echo "[$(date -Is)] Multi-line manifest -> using as-is (consider staging to scratch for speed)"
+  cp -f "$MANIFEST_ORIG" "$WORK_MANIFEST"
+fi
+
+echo "[$(date -Is)] Work manifest lines: $(wc -l < "$WORK_MANIFEST")"
+head -n 3 "$WORK_MANIFEST" | sed 's|^|  -> |'
+
+# ---- Make 1-line chunks (finest granularity) ----
+CHUNKS=$(wc -l < "$WORK_MANIFEST")
+split -n l/$CHUNKS -d "$WORK_MANIFEST" "$SCRATCH_DIR/chunk_"
+ls -lh "$SCRATCH_DIR"/chunk_* | sed 's|^|[chunks] |'
+
+# ---- Parallelism ----
+CPUS=${SLURM_CPUS_PER_TASK:-1}
+PAR=$(( CPUS / PAR_DEFAULT_DIV )); (( PAR >= 1 )) || PAR=1
+echo "[$(date -Is)] Parallel workers: $PAR  (cpus-per-task=$CPUS)"
+
+# ---- Wrapper for one chunk (timestamped logs + /usr/bin/time) ----
+WRAP="$SCRATCH_DIR/run_one_chunk.sh"
+cat > "$WRAP" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+f="$1"; BIN="$2"; DICT="$3"; OUT="$4"; LOG_DIR="$5"; VERBOSE="$6"
+chunk="$(basename "$f")"; log="$LOG_DIR/${chunk}.log"
+exec > >(tee -a "$log") 2>&1
+echo "[$(date -Is)] START $chunk lines=$(wc -l < "$f") host=$(hostname) pid=$$"
+if [ ! -s "$f" ]; then echo "[$(date -Is)] SKIP  $chunk (empty)"; exit 0; fi
+/usr/bin/time -v "$BIN" --mode pair \
+  --input_name "$f" \
+  -d "$DICT" \
+  --cbc_len 16 --umi_len 12 --leader_len 8 --follower_len 31 --gap_len 0 \
+  --verbose "$VERBOSE" \
+  --output_name "$OUT/${chunk}.bkc"
+rc=$?
+echo "[$(date -Is)] END   $chunk exit=$rc"
+exit $rc
+EOF
+chmod +x "$WRAP"
+
+# ---- Run chunks ----
+if command -v parallel >/dev/null 2>&1; then
+  echo "[$(date -Is)] Launching with GNU parallel..."
+  parallel --group -j "$PAR" "$WRAP" {} "$BIN" "$DICT" "$OUT_DIR" "$CHUNK_LOG_DIR" "$VERBOSE_LEVEL" ::: "$SCRATCH_DIR"/chunk_*
+else
+  echo "[$(date -Is)] GNU parallel not found; running serially..."
+  for f in "$SCRATCH_DIR"/chunk_*; do "$WRAP" "$f" "$BIN" "$DICT" "$OUT_DIR" "$CHUNK_LOG_DIR" "$VERBOSE_LEVEL"; done
+fi
+
+# ---- Dump .bkc -> per-chunk TSVs (then aggregate) ----
+DUMP_OUT="$OUT_DIR/dump_tsv"; mkdir -p "$DUMP_OUT"
+
+dump_one() {
+  in="$1"; base="$(basename "$in" .bkc)"; out="$DUMP_OUT/${base}.tsv"
+  if [[ -x "$DUMP_BIN" ]]; then
+    "$DUMP_BIN" --input "$in" --output "$out" 2>>"$CHUNK_LOG_DIR/dump.log" || \
+    "$DUMP_BIN" -i "$in" -o "$out" 2>>"$CHUNK_LOG_DIR/dump.log"
+  else
+    # If bkc_dump is on PATH
+    if command -v bkc_dump >/dev/null 2>&1; then
+      bkc_dump --input "$in" --output "$out" 2>>"$CHUNK_LOG_DIR/dump.log" || \
+      bkc_dump -i "$in" -o "$out" 2>>"$CHUNK_LOG_DIR/dump.log"
+    else
+      echo "ERROR: bkc_dump not found at $DUMP_BIN or in PATH" | tee -a "$CHUNK_LOG_DIR/dump.log"
+      return 1
+    fi
+  fi
+}
+
+echo "[$(date -Is)] Dumping .bkc files to TSV..."
+shopt -s nullglob
+for bkc in "$OUT_DIR"/*.bkc; do dump_one "$bkc"; done
+shopt -u nullglob
+
+# ---- Aggregate TSVs: sum counts for identical (anchor,target) rows ----
+AGG_PY="$SCRATCH_DIR/aggregate_counts.py"
+cat > "$AGG_PY" <<'PY'
+import sys, os, csv, glob, argparse, collections
+ap=argparse.ArgumentParser()
+ap.add_argument("--indir", required=True)
+ap.add_argument("--outfile", required=True)
+ap.add_argument("--group-by", default="anchor,target")
+args=ap.parse_args()
+gb=[c.strip() for c in args.group_by.split(",") if c.strip()]
+counter=collections.Counter()
+all_keys=set()
+files=sorted(glob.glob(os.path.join(args.indir,"*.tsv")))
+if not files: sys.exit("No TSVs to aggregate.")
+# detect count column name
+def get_count_name(hdr):
+    for c in ("count","counts","n","num","frequency"):
+        if c in hdr: return c
+    raise SystemExit("No count-like column found in TSV header: "+",".join(hdr))
+for path in files:
+    with open(path,newline="") as f:
+        r=csv.DictReader(f,delimiter="\t")
+        hdr=r.fieldnames
+        if hdr is None: continue
+        cnt_name=get_count_name(hdr)
+        for row in r:
+            key=tuple(row.get(k,"") for k in gb)
+            try:
+                val=int(row.get(cnt_name,0))
+            except:
+                try: val=float(row.get(cnt_name,0)); val=int(val)
+                except: val=0
+            counter[key]+=val
+        all_keys.update(gb+[cnt_name])
+# write output
+with open(args.outfile,"w",newline="") as f:
+    w=csv.writer(f,delimiter="\t")
+    w.writerow(gb+["count"])
+    for key, val in counter.items():
+        w.writerow(list(key)+[val])
+print(f"[aggregate] wrote {len(counter)} rows to {args.outfile}")
+PY
+
+FINAL_TSV="$OUT_DIR/fl_all_agg.tsv"
+python "$AGG_PY" --indir "$DUMP_OUT" --outfile "$FINAL_TSV" --group-by "$GROUP_BY_COLS" | tee -a "$CHUNK_LOG_DIR/aggregate.log"
+
+echo "[$(date -Is)] DONE."
+echo "Outputs:"
+echo "  - Per-chunk .bkc:     $OUT_DIR/*.bkc"
+echo "  - Per-chunk TSVs:     $OUT_DIR/dump_tsv/*.tsv"
+echo "  - Aggregated (summed) $FINAL_TSV   (grouped by: $GROUP_BY_COLS)"
+echo "Logs:"
+echo "  - Slurm:              $LOG_DIR/$(basename "$SLURM_JOB_NAME")-$SLURM_JOB_ID.out/.err"
+echo "  - Per-chunk logs:     $CHUNK_LOG_DIR/*.log"
+
+

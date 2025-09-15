@@ -1,0 +1,1 @@
+SRR6334436_1.fastq,SRR6334436_2.fastq
