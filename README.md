@@ -1,80 +1,45 @@
-Optimized Pipeline
+# Optimized Pipeline
 
-This repository contains a high-performance pipeline for processing large single-cell sequencing datasets (e.g., Tabula Sapiens, ERR samples). It includes tools for chunking FASTQs, running bkc_filter/bkc_dump, aggregating results, and generating per-cell FASTA outputs ("carrots").
+This repository contains a **high-performance pipeline** for processing **large single-cell sequencing datasets** on the Stanford Sherlock HPC cluster. It includes tools for chunking, filtering, aggregating, and converting sequencing reads into FASTA outputs.
 
-Repository Structure
+## Repository Structure
 
-chunk_fastqs.sh / chunk_fastqs.sbatch
-Scripts to split raw FASTQ files into manageable chunks for downstream processing.
+- `chunk_fastqs.sh` / `chunk_fastqs.sbatch` – Split raw FASTQ files into manageable chunks.  
+- `chunk_tb_fastqs.sh` / `chunk_tb_fastqs.sbatch` – Specialized chunking for Tabula Sapiens lane-format FASTQs.  
+- `run_chunks.sbatch` – Slurm batch script for running **bkc_filter** and **bkc_dump** on paired FASTQ chunks.  
+- `submit_chunks.sh` – Helper script to submit arrays of chunk-processing jobs.  
+- `carrots_ultra.sbatch` / `carrots_ultra.py` – Aggregate filtered results, normalize, sort, and generate FASTA files.  
+- `out/count_carrots.sbatch` – Count FASTA records (**“carrots”**) per file and compute grand totals.  
+- `samples.txt`, `pairs.txt`, `pairs_tabula.txt` – Input lists for batch jobs.  
+- `out/`, `bkcdump/`, `bkctxt/`, `tabuladump/`, `tabulatxt/` – Output and intermediate directories.
 
-chunk_tb_fastqs.sh / chunk_tb_fastqs.sbatch
-Specialized chunker for Tabula Sapiens–style lane naming.
+## Usage
 
-pairs.txt / pairs_tabula.txt
-Lists of paired FASTQ chunks (R1,R2) used by the chunking and filter jobs.
-
-run_chunks.sbatch / submit_chunks.sh
-Slurm batch scripts to run bkc_filter and bkc_dump in array mode across many chunks.
-
-carrots_ultra.py / carrots_ultra.sbatch
-Aggregates per-chunk txt dumps, normalizes, sorts, and converts into FASTA files per sample.
-
-carrots_merge.py / carrots_merge_stream.py
-Utilities to merge carrot FASTAs across samples.
-
-count_carrots.sbatch
-Helper Slurm job that counts FASTA records (carrots) in each output and reports per-file counts and totals.
-
-commands/
-Contains builds of the bkc_filter and bkc_dump executables.
-
-out/
-Default output directory for FASTAs, logs, and carrot counts.
-
-Typical Workflow
-
-Chunk FASTQs
-
+### 1. Chunk FASTQ Files
+```bash
 sbatch chunk_fastqs.sbatch /path/to/fastqs
-# or for Tabula Sapiens
-sbatch chunk_tb_fastqs.sbatch /path/to/fastqs
+2. Prepare Pair and Sample Lists
+Ensure pairs.txt or pairs_tabula.txt and samples.txt are correctly generated using sed and sort.
 
-
-Prepare pairs list
-Generated automatically by the chunker (pairs.txt or pairs_tabula.txt).
-
-Run filter/dump on chunks
-
-./submit_chunks.sh pairs.txt
-# submits an array of run_chunks.sbatch jobs
-
-
-Generate FASTAs
-
+3. Run Filtering and Dump
+bash
+Copy code
+THREADS=32 EXEC_FILTER=./bin/bkc_filter EXEC_DUMP=./bin/bkc_dump ./submit_chunks.sh pairs.txt
+4. Aggregate to FASTA
+bash
+Copy code
 NL=$(wc -l < samples.txt)
 sbatch --array=1-$NL carrots_ultra.sbatch
-
-
-Count carrots
-
+5. Count Carrots
+bash
+Copy code
 sbatch out/count_carrots.sbatch out/fasta carrot_counts
-
-Requirements
-
-Slurm (HPC scheduler)
-
-GNU coreutils (sort, split, awk, etc.)
-
-Python 3.12 (loaded via module load)
-
-bkc_filter / bkc_dump executables (expected in commands/ or in PATH)
-
-Optional: pigz, GNU parallel for faster decompression and chunking.
-
 Notes
+Partition: Jobs use the horence partition by default.
 
-Adjust --cpus-per-task, --mem, and --time in the sbatch scripts depending on dataset size.
+Modules: Ensure required modules (e.g., python, gcc, samtools) are loaded on Sherlock.
 
-Large FASTA outputs (out/fasta* directories) are git-ignored; only logs and configs should be committed.
+Performance: Increase --cpus-per-task and memory in .sbatch files for very large datasets.
 
-Environment modules (e.g., ml gcc/14.2.0, ml samtools/1.16.1) are loaded inside the batch scripts when needed.
+Storage: Outputs are written under out/ (e.g., out/fasta, out/fasta_tabula, carrot_counts_*).
+
