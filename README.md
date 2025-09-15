@@ -1,6 +1,6 @@
 Optimized Pipeline
 
-This repository contains a high-performance pipeline for processing large single-cell sequencing datasets (e.g. Tabula Sapiens, ERR samples). It includes tools for chunking FASTQs, running the bkc_filter / bkc_dump processing stages, aggregating results, and generating per-cell FASTA outputs ("carrots").
+This repository contains a high-performance pipeline for processing large single-cell sequencing datasets (e.g., Tabula Sapiens, ERR samples). It includes tools for chunking FASTQs, running bkc_filter/bkc_dump, aggregating results, and generating per-cell FASTA outputs ("carrots").
 
 Repository Structure
 
@@ -11,10 +11,10 @@ chunk_tb_fastqs.sh / chunk_tb_fastqs.sbatch
 Specialized chunker for Tabula Sapiens–style lane naming.
 
 pairs.txt / pairs_tabula.txt
-Lists of paired FASTQ chunks (R1,R2). Used by the chunking + filter jobs.
+Lists of paired FASTQ chunks (R1,R2) used by the chunking and filter jobs.
 
 run_chunks.sbatch / submit_chunks.sh
-Slurm batch scripts to run bkc_filter + bkc_dump in array mode across many chunks.
+Slurm batch scripts to run bkc_filter and bkc_dump in array mode across many chunks.
 
 carrots_ultra.py / carrots_ultra.sbatch
 Aggregates per-chunk txt dumps, normalizes, sorts, and converts into FASTA files per sample.
@@ -23,10 +23,10 @@ carrots_merge.py / carrots_merge_stream.py
 Utilities to merge carrot FASTAs across samples.
 
 count_carrots.sbatch
-Helper Slurm job that counts FASTA records (carrots) in each output and reports per-file counts + totals.
+Helper Slurm job that counts FASTA records (carrots) in each output and reports per-file counts and totals.
 
 commands/
-Builds of bkc_filter and bkc_dump executables.
+Contains builds of the bkc_filter and bkc_dump executables.
 
 out/
 Default output directory for FASTAs, logs, and carrot counts.
@@ -67,7 +67,7 @@ GNU coreutils (sort, split, awk, etc.)
 
 Python 3.12 (loaded via module load)
 
-bkc_filter / bkc_dump executables (expected in commands/ or PATH)
+bkc_filter / bkc_dump executables (expected in commands/ or in PATH)
 
 Optional: pigz, GNU parallel for faster decompression and chunking.
 
@@ -75,6 +75,6 @@ Notes
 
 Adjust --cpus-per-task, --mem, and --time in the sbatch scripts depending on dataset size.
 
-Large FASTA outputs (out/fasta*) are git-ignored; only logs and configs should be committed.
+Large FASTA outputs (out/fasta* directories) are git-ignored; only logs and configs should be committed.
 
-Environment modules (e.g. ml gcc/14.2.0, ml samtools/1.16.1) are loaded inside the batch scripts when needed.
+Environment modules (e.g., ml gcc/14.2.0, ml samtools/1.16.1) are loaded inside the batch scripts when needed.
