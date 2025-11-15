@@ -19,18 +19,18 @@ This repository contains a **high-performance pipeline** for processing **large 
 ```bash
 sbatch chunk_fastqs.sbatch /path/to/fastqs
 ```
-2. Prepare Pair and Sample Lists
+### 2. Prepare Pair and Sample Lists
 
 Ensure pairs.txt or pairs_tabula.txt and samples.txt are correctly generated using sed and sort.
 
-3. Run Filtering and Dump
+### 3. Run Filtering and Dump
 THREADS=32 EXEC_FILTER=./bin/bkc_filter EXEC_DUMP=./bin/bkc_dump ./submit_chunks.sh pairs.txt
 
-4. Aggregate to FASTA
+### 4. Aggregate to FASTA
 NL=$(wc -l < samples.txt)
 sbatch --array=1-$NL carrots_ultra.sbatch
 
-5. Count Carrots
+### 5. Count Carrots
 sbatch out/count_carrots.sbatch out/fasta carrot_counts
 
 Notes
