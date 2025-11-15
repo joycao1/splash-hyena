@@ -18,7 +18,7 @@ This repository contains a **high-performance pipeline** for processing **large 
 ### 1. Chunk FASTQ Files
 ```bash
 sbatch chunk_fastqs.sbatch /path/to/fastqs
-
+```
 2. Prepare Pair and Sample Lists
 
 Ensure pairs.txt or pairs_tabula.txt and samples.txt are correctly generated using sed and sort.
