@@ -1,6 +1,6 @@
 # Optimized Pipeline
 
-This repository contains a **high-performance pipeline** for processing **large single-cell sequencing datasets** on the Stanford Sherlock HPC cluster. It includes tools for chunking, filtering, aggregating, and converting sequencing reads into FASTA outputs.
+This repository contains a pipeline for processing large single-cell sequencing datasets on the Stanford Sherlock HPC cluster. It includes tools for chunking, filtering, aggregating, and converting sequencing reads into FASTA outputs.
 
 ## Repository Structure
 
